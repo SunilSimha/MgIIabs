@@ -1,0 +1,4 @@
+# Distribution/packaging
+.eggs/
+*.egg-info/
+develop-eggs/
