@@ -19,14 +19,14 @@ def window_th(k,R=1):
     """
     Normalised top-hat window function
     in the fourier domain. All lengths
-    are in h^(-1) Mpc.
+    are in Mpc.
     Parameters
     ----------
     k: float
         Wavenumber
     R: float, optional
         Smoothing radius. By default
-        1 h^(-1) Mpc
+        1 Mpc
     Returns
     -------
     W: float
@@ -39,7 +39,7 @@ def window_th(k,R=1):
     #Note to self: Try using astropy units
 
 
-def psvariance(R, W='th',low = 1e-7,high=100,z=0):
+def psvariance(R, W='th',low = 1e-7,high=None,z=0):
     """
     Variance of the linear power spectrum. Use the
     power spectrum from COMPOS (Ziang Yen). Numerically
@@ -68,9 +68,11 @@ def psvariance(R, W='th',low = 1e-7,high=100,z=0):
     import numpy as np
     from scipy.integrate import quad
     from compos import const, matterps
+    if high is None:
+        high = 20/R
 
     const.initializecosmo(z=z)
-    integrand = lambda k: (k*window_th(k,R))**2*matterps.normalizedmp(k)
+    integrand = lambda k: (k*window_th(k,R))**2*matterps.normalizedmp(k*const.cosmo['h'],z=z)
     integral = quad(integrand,low,high)
     variance = integral[0]/(2*np.pi)**2
     error = integral[1]/(2*np.pi)**2
@@ -159,11 +161,17 @@ def dNdM(M,window='th',z=0):
     """
     import numpy as np
     from compos import const
+    from astropy.units import Mpc, M_sun
+    from astropy.constants import G as grav
+    import astropy.units as u
+
+    H0 = 100*u.km/u.s/Mpc
+    rho_crit0 = (3*H0**2/(8*np.pi*grav)).to(M_sun/Mpc**3).value
 
     const.initializecosmo(z=z)
-    rho_crit0 = 2.776992e12*const.cosmo['h']**2 #M_sun/Mpc^3
+    #rho_crit0 = 2.776992e12 #M_sun/Mpc^3
     rho_m = const.cosmo['omega_0']*rho_crit0*(1+z)**3
-    R = (3*M/const.cosmo['h']/(4*np.pi*rho_m))**(1/3)
+    R = (3*M/(4*np.pi*rho_m))**(1/3)
 
     sigma = np.sqrt(psvariance(R,z=z)[0])
 
