@@ -77,7 +77,7 @@ def psvariance(R, W='th',low = 1e-7,high=100,z=0):
     return variance, error
 
 #Include redshift dependence of the parameters.
-def f_of_sigma(sigma,A=0.186,a=1.47,b=2.57,c=1.19):
+def f_of_sigma(sigma,A=0.186,a=1.47,b=2.57,c=1.19,z=0,Delta=200):
     """
     The prefactor in the mass function parametrized
     as in Tinker et al 2008. The default values
@@ -90,7 +90,11 @@ def f_of_sigma(sigma,A=0.186,a=1.47,b=2.57,c=1.19):
     sigma: float
         Standard deviation of the linear power spectrum
     A,a,b,c: float, optional
-        0.186 by default
+        For Delta=200.
+    z: float, optional 
+        Redshift
+    Delta: float, optional
+        Halo mean overdensity
     Returns
     -------
     f: float
@@ -98,6 +102,10 @@ def f_of_sigma(sigma,A=0.186,a=1.47,b=2.57,c=1.19):
 
     """
     import numpy as np
+    A = A*(1+z)**(-0.14)
+    a = a*(1+z)**(-0.06)
+    alpha = np.exp(-(0.075/np.log(Delta/75))**1.2)
+    b = b*(1+z)**(-alpha)
     f = A*((sigma/b)**(-a)+1)*np.exp(-c/sigma/sigma)
     return f
 
