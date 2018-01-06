@@ -125,6 +125,38 @@ def rew_of_s(s,M,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
         rew = A_w*2*G0/np.sqrt(s**2+ah**2)*np.arctan(np.sqrt((Rg**2-s**2)/(s**2+ah**2))).value
         return rew.to(u.nm)
 
+def lowest_mass(rew,low=8,high=16,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
+    """
+    Finds the lowest halo mass for which
+    the input rest equivalent width is possible
+    Parameters
+    ----------
+    rew: astropy.Quantity
+        Rest eauivalent width (nm)
+    low, high: float,optional
+        lower and upper logarithmic_10 limits
+        of search window of mass 
+    ah_by_Rg : float, optional
+        Ratio of core radius to effective
+        gas radius
+    A_w0 : float, optional
+        Defined in eq. 6, Tinker & Chen 2008, ApJ
+        In units of  h nm cm^2/g
+    z: float, optional
+        Redshift
+    Returns
+    -------
+    M: astropy.Quantity
+        Halo mass (M_sun)
+    """
+    from scipy.optimize import brentq
+
+    f = lambda logM: rew_of_s(0*Mpc,10**logM*M_sun,ah_by_Rg,A_w0,z).value - rew.value
+    try:
+        return 10**brentq(f,low,high)*M_sun
+    except(ValueError):
+        raise ValueError("Cannot find a solution in the search window.")
+
 def s_of_rew(rew,M,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
     """
     Inverse function of rew_of_s. Uses brentq for root finding.

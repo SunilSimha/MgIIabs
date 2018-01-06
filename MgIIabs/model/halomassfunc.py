@@ -39,7 +39,7 @@ def window_th(k,R=1):
     #Note to self: Try using astropy units
 
 
-def psvariance(R, W='th',low = 1e-7,high=None,z=0):
+def psvariance(R, growthf=1, W='th',low = 1e-7,high=None,z=None,):
     """
     Variance of the linear power spectrum. Use the
     power spectrum from COMPOS (Ziang Yen). Numerically
@@ -56,8 +56,9 @@ def psvariance(R, W='th',low = 1e-7,high=None,z=0):
         Lower integration limit to get the variance
     high: float, optional
         Upper integration limit
-    z: float, optional
-        Redshift. Defualt value is 0.
+    growthf: float
+        Growthfactor for a non-zero redshift. If this is
+        not provided, it is assumed to be at redshift 0.
     Returns
     -------
     variance: float
@@ -67,12 +68,13 @@ def psvariance(R, W='th',low = 1e-7,high=None,z=0):
     """
     import numpy as np
     from scipy.integrate import quad
-    from compos import const, matterps
+    from compos import const, matterps, growthfactor
+    import pdb
     if high is None:
         high = 20/R
-
-    const.initializecosmo(z=z)
-    integrand = lambda k: (k*window_th(k,R))**2*matterps.normalizedmp(k*const.cosmo['h'],z=z)
+    const.initializecosmo()
+    #integrand = lambda k: (k*window_th(k,R))**2*gfactor*matterps.normalizedmp(k*const.cosmo['h'])
+    integrand = lambda k: (k*window_th(k,R)*growthf)**2*matterps.normalizedmp(k*const.cosmo['h'])
     integral = quad(integrand,low,high)
     variance = integral[0]/(2*np.pi)**2
     error = integral[1]/(2*np.pi)**2
@@ -134,11 +136,12 @@ def dlogsigma_dr(R,eps=None,**kwargs):
     import numpy as np
     if eps is None:
         eps = R*1e-8
-    lns = lambda x: 0.5*np.log(psvariance(x)[0])
+    
+    lns = lambda x: 0.5*np.log(psvariance(x,**kwargs)[0])
     dlnsdR = 0.5*(lns(R+eps)-lns(R-eps))/eps
     return dlnsdR
 
-def dNdM(M,window='th',z=0):
+def dNdM(M,z=0,growthf=None,window='th'):
     """
     The halo mass function as given equation 2 of
     Tinker 2008 ApJ 679, 1218
@@ -146,12 +149,17 @@ def dNdM(M,window='th',z=0):
     ----------
     M: float
         Halo mass in units of M_sun/h
-    window: string, optional
-        Choice of window function. By default it
-        is a top hat profile.
     z: float, optional
         Redshift at which the mass funciton is to
         be computed. Default value: 0
+    growthf: float, optional
+        Provide the growthfactor at redshift z.
+        If not provided, `dNdM` will calculate it but
+        it will be slow if `dNdM` is being called
+        multiple times.
+    window: string, optional
+        Choice of window function. By default it
+        is a top hat profile.
     Returns
     -------
     dNdM: float
@@ -160,20 +168,22 @@ def dNdM(M,window='th',z=0):
         true dN/dM, multiply by rho_m/M^2
     """
     import numpy as np
-    from compos import const
+    from compos import const, growthfactor
     from astropy.units import Mpc, M_sun
     from astropy.constants import G as grav
     import astropy.units as u
 
     H0 = 100*u.km/u.s/Mpc
-    rho_crit0 = (3*H0**2/(8*np.pi*grav)).to(M_sun/Mpc**3).value
+    rho_crit0 = (3*H0**2/(8*np.pi*grav)).to(M_sun/Mpc**3)
 
-    const.initializecosmo(z=z)
+    const.initializecosmo()
     #rho_crit0 = 2.776992e12 #M_sun/Mpc^3
     rho_m = const.cosmo['omega_0']*rho_crit0*(1+z)**3
     R = (3*M/(4*np.pi*rho_m))**(1/3)
+    R = R.to(Mpc).value
+    if growthf is None:
+        growthf = growthfactor.growfunc_z(z) 
+    sigma = np.sqrt(psvariance(R,growthf)[0])
 
-    sigma = np.sqrt(psvariance(R,z=z)[0])
-
-    dNdM = -f_of_sigma(sigma)*R*dlogsigma_dr(R)/3
+    dNdM = -f_of_sigma(sigma,z=z)*R*dlogsigma_dr(R,growthf=growthf)/3
     return dNdM
