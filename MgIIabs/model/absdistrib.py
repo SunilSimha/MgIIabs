@@ -71,7 +71,7 @@ def d2ndWdl(rew,z=0.0,growthf=None,spline_interp=None):
     integral = A*ndtr(-(M_low+mu)/sigma)
     return integral/u.nm/u.Mpc
 
-def _dldz(z,spline_interp=None):
+def _dldz(z):
     """
     Variation of the comoving radial
     distance as function of redshift
@@ -93,6 +93,12 @@ def _dldz(z,spline_interp=None):
     omega_m = const.cosmo['omega_0']
     omega_DE = const.cosmo['omega_q']
     return (c/H0/sqrt(omega_m*(1+z)**3+omega_DE)).to(Mpc)
+
+def d2ndWdz(rew,z=0.0,growthf=None,spline_interp=None):
+    """
+    Replaces the comoving distance with redshift
+    """
+    return d2ndWdl(rew,z,growthf,spline_interp)*_dldz(z,spline_interp=None)
 
 def dNdz(z,rew_min, rew_max=float('inf'),spline_interp=None):
     """
