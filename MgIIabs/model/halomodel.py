@@ -114,12 +114,12 @@ def rew_of_s(s,M,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
     import numpy as np
     assert(s.value>=0), "Impact parameter cannot be negative"
 
-    Rg = rg(M)
+    Rg = rg(M,z)
     A_w = Aw(M,A_w0)
     ah = ah_by_Rg*Rg
     G0 = g0(M,z,ah_by_Rg)
 
-    if s.value>Rg.value:
+    if s.value>=Rg.value:
         return 0*u.nm
     else:
         rew = A_w*2*G0/np.sqrt(s**2+ah**2)*np.arctan(np.sqrt((Rg**2-s**2)/(s**2+ah**2))).value
@@ -135,7 +135,7 @@ def lowest_mass(rew,low=8,high=16,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
         Rest eauivalent width (nm)
     low, high: float,optional
         lower and upper logarithmic_10 limits
-        of search window of mass 
+        of search window of mass (h^-1 Msun)
     ah_by_Rg : float, optional
         Ratio of core radius to effective
         gas radius
@@ -150,11 +150,13 @@ def lowest_mass(rew,low=8,high=16,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
         Halo mass (M_sun)
     """
     from scipy.optimize import brentq
+    import pdb
 
     f = lambda logM: rew_of_s(0*Mpc,10**logM*M_sun,ah_by_Rg,A_w0,z).value - rew.value
     try:
         return 10**brentq(f,low,high)*M_sun
     except(ValueError):
+        pdb.set_trace()
         raise ValueError("Cannot find a solution in the search window.")
 
 def s_of_rew(rew,M,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
@@ -189,7 +191,7 @@ def s_of_rew(rew,M,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
     try:
         return brentq(g,0,Rg.value)*Mpc
     except(ValueError):
-       raise ValueError("rew={:f} cannot be achieved with this model".format(rew))
+        raise ValueError("rew={:f} cannot be achieved with this model".format(rew))
 
 def kappa_g(M):
     """
