@@ -3,7 +3,7 @@ A module to compute dN/dWdl for absorbers.
 Specifically to calculate dN/dl
 """
 import astropy.units as u
-from astropy.constants import G as grav
+from astropy.constants import G as grav, c
 from astropy.units.astrophys import Mpc, M_sun
 from numpy import pi
 from compos import const
@@ -61,15 +61,81 @@ def d2ndWdl(rew,z=0.0,growthf=None,spline_interp=None):
     if spline_interp is None:
         filename = resource_filename('MgIIabs.model','')[:-5]+"data/gauss_params.csv"
         params = Table.read(filename,format="ascii.csv")
-
-        M_low = log10(lowest_mass(rew,low=3,z=z).value/1e12)
         x = params['z']
         y = array([params['A'],params['mu'],params['sigma']])
         spline_interp = interp1d(x,y,kind="cubic")
     A, mu, sigma = spline_interp(z)
-    
+
+    M_low = log10(lowest_mass(rew,low=3,z=z).value/1e12)
+
     integral = A*ndtr(-(M_low+mu)/sigma)
     return integral/u.nm/u.Mpc
+
+def _dldz(z,spline_interp=None):
+    """
+    Variation of the comoving radial
+    distance as function of redshift
+    Cosmology: Planck 13
+    Parameters
+    ----------
+    z: float
+        Redshift
+    spline_interp: function, optional
+        Spline interpolation of gaussian
+        parameters.
+    Returns
+    -------
+    dlbydz: astropy.Quantity
+        In units of h^-1 Mpc
+    """
+    from numpy import sqrt
+    const.initializecosmo()
+    omega_m = const.cosmo['omega_0']
+    omega_DE = const.cosmo['omega_q']
+    return (c/H0/sqrt(omega_m*(1+z)**3+omega_DE)).to(Mpc)
+
+def dNdz(z,rew_min, rew_max=float('inf'),spline_interp=None):
+    """
+    Integral of d^2N/dWdl over the specified REW
+    window.
+    Parameters
+    ----------
+    z: float
+        Redshift
+    rew_min: astropy.Quantity
+        Minimum rest equivalent width (nm)
+    rew_max: astropy.Quantity, optional
+        Maximum REW (Inf by default)
+    Returns
+    -------
+    integral: float
+    """
+    from compos import growthfactor as gf
+    from astropy.table import Table
+    from numpy import log10, array, isinf
+    from pkg_resources import resource_filename
+    from scipy.interpolate import interp1d
+    from scipy.integrate import quad
+    from scipy.special import ndtr
+    from .halomodel import lowest_mass
+
+    if spline_interp is None:
+        filename = resource_filename('MgIIabs.model','')[:-5]+"data/gauss_params.csv"
+        params = Table.read(filename,format="ascii.csv")
+        x = params['z']
+        y = array([params['A'],params['mu'],params['sigma']])
+        spline_interp = interp1d(x,y,kind="cubic")
+    A, mu, sigma = spline_interp(z)
+
+    M_low1 = log10(lowest_mass(rew_min,low=3,z=z).value/1e12)
+    f = lambda x: ndtr(-x)
+
+    if isinf(rew_max):
+        integral = A*_dldz(z)*quad(f,(M_low1+mu)/sigma,float('inf'))[0]
+    else:
+        M_low2 = log10(lowest_mass(rew_max,low=0,z=z).value/1e12)
+        integral = A*_dldz(z).value*quad(f,(M_low1+mu)/sigma,(M_low2+mu)/sigma)[0]
+    return integral       
 
 #def d2ndWdl(rew=0.1*u.nm,M_low=None,M_high=4,z=0,growthf=1,**kwargs):
 #    """
