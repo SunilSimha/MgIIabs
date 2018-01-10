@@ -31,7 +31,7 @@ def rg(M,z=0):
     #Because the comoving radius of the halo is redshift independent,
     return 0.08*Mpc/(1+z)*(M/1e12/M_sun)**(1/3)
 
-def Aw(M, A_w0=13*u.nm*(u.cm)**2/u.g):
+def Aw(M, A_w0=13.0423002*u.nm*(u.cm)**2/u.g):
     """
     Fudge factor (for the classical model)
     Parameters
@@ -39,7 +39,7 @@ def Aw(M, A_w0=13*u.nm*(u.cm)**2/u.g):
     M: astropy.Quantity
         Halo mass
     A_w0: astropy.Quantity
-        13 h nm cm^2/g by default
+        13.0423002 h nm cm^2/g by default
     Returns
     -------
     A_w: astropy.Quantity
@@ -77,16 +77,16 @@ def g0(M,z=0,ah_by_Rg=0.2):
     from halotools.empirical_models import NFWProfile
 
     nfw = NFWProfile(cosmology=Planck13,redshit=z,mdef='200m',conc_mass_model='dutton_maccio14')
-    conc = nfw.conc_NFWmodel(prim_haloprop=M.value)
+    conc = nfw.conc_NFWmodel(prim_haloprop=M.to(M_sun).value/Planck13.h,mdef='200m')
 
     Rg = rg(M,z)
-    m_enc = nfw.enclosed_mass(Rg.value,M.value,conc)*M_sun
+    m_enc = nfw.enclosed_mass(Rg.value/Planck13.h,M.value/Planck13.h,conc)*M_sun
     ah = ah_by_Rg*Rg
 
     G0 = m_enc/(4*pi)/(Rg-ah*arctan(1/ah_by_Rg))
     return G0.to(M_sun/Mpc)
 
-def rew_of_s(s,M,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
+def rew_of_s(s,M,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
     """
     Defines the relationship between the REW
     of MgII 2796 and the impact parameter assuming
@@ -125,7 +125,7 @@ def rew_of_s(s,M,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
         rew = A_w*2*G0/np.sqrt(s**2+ah**2)*np.arctan(np.sqrt((Rg**2-s**2)/(s**2+ah**2))).value
         return rew.to(u.nm)
 
-def lowest_mass(rew,low=8,high=16,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
+def lowest_mass(rew,low=8,high=16,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
     """
     Finds the lowest halo mass for which
     the input rest equivalent width is possible
@@ -159,7 +159,7 @@ def lowest_mass(rew,low=8,high=16,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
         pdb.set_trace()
         raise ValueError("Cannot find a solution in the search window.")
 
-def s_of_rew(rew,M,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
+def s_of_rew(rew,M,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
     """
     Inverse function of rew_of_s. Uses brentq for root finding.
     Parameters
@@ -212,14 +212,14 @@ def kappa_g(M):
     import numpy as np
     from scipy import interpolate
     #Data from
-    m_array = np.asarray([10.0,11.33,12.66,14.0])
+    logm_array = np.asarray([10.0,11.33,12.66,14.0])
     kappa_array = np.asarray([-1.721,-0.012,-0.198,-1.763])
-    spline_interp = interpolate.splrep(m_array,kappa_array)
+    spline_interp = interpolate.interp1d(logm_array,kappa_array,bounds_error=False,kind='linear')
 
-    output_points = 10**interpolate.splev(np.log10(M.value),spline_interp)
+    output_points = 10**spline_interp(np.log10(M.value))
     return output_points
 
-def _ds_drew(s,M,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
+def _ds_drew(s,M,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
     """
     Returns ds/d(rew)
     Parameters
@@ -252,7 +252,7 @@ def _ds_drew(s,M,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
     dsdrew = 1/(2*A_w*G0)/(s*np.arctan(x(s)).value/y(s)**3 + (1+x(s)**2)*y(s)*s*x(s)/(Rg**2-s**2)/y(Rg)**2)
     return dsdrew
 
-def p_rew_given_m(rew,M,ah_by_Rg=0.2,A_w0=13*u.nm*(u.cm)**2/u.g,z=0):
+def p_rew_given_m(rew,M,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
     """
     Returns the conditional probability P(REW|M) for
     the given value of M and REW.

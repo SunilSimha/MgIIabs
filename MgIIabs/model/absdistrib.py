@@ -98,7 +98,7 @@ def d2ndWdz(rew,z=0.0,growthf=None,spline_interp=None):
     """
     Replaces the comoving distance with redshift
     """
-    return d2ndWdl(rew,z,growthf,spline_interp)*_dldz(z,spline_interp=None)
+    return d2ndWdl(rew,z,growthf,spline_interp)*_dldz(z)
 
 def dNdz(z,rew_min, rew_max=float('inf'),spline_interp=None):
     """
@@ -124,6 +124,7 @@ def dNdz(z,rew_min, rew_max=float('inf'),spline_interp=None):
     from scipy.integrate import quad
     from scipy.special import ndtr
     from .halomodel import lowest_mass
+    import pdb
 
     if spline_interp is None:
         filename = resource_filename('MgIIabs.model','')[:-5]+"data/gauss_params.csv"
@@ -140,7 +141,7 @@ def dNdz(z,rew_min, rew_max=float('inf'),spline_interp=None):
         integral = A*_dldz(z)*quad(f,(M_low1+mu)/sigma,float('inf'))[0]
     else:
         M_low2 = log10(lowest_mass(rew_max,low=0,z=z).value/1e12)
-        integral = A*_dldz(z).value*quad(f,(M_low1+mu)/sigma,(M_low2+mu)/sigma)[0]
+        integral = quad(f,(M_low1+mu)/sigma,(M_low2+mu)/sigma)[0]*A*_dldz(z).value
     return integral       
 
 #def d2ndWdl(rew=0.1*u.nm,M_low=None,M_high=4,z=0,growthf=1,**kwargs):
