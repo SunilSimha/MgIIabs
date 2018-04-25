@@ -74,7 +74,7 @@ def psvariance(R, growthf=1,low = -5.0,high=3.0,num=10000):
 
     logk = linspace(low,high,num)
     k = 10**logk
-    f = (k*window_th(k,R)*growthf)**2*matterps.normalizedmp(k*const.cosmo['h'])*k
+    f = (k*window_th(k,R)*growthf)**2*matterps.normalizedmpnw(k*const.cosmo['h'])*k*const.cosmo['h']**3
     integral = simps(f,logk)*log(10)/(2*pi)**2
     #def integrand(log10k):
     #    k = 10**log10k
@@ -190,5 +190,5 @@ def dNdM(M,z=0,growthf=None,window='th'):
         growthf = growthfactor.growfunc_z(z) 
     sigma = np.sqrt(psvariance(R,growthf))
 
-    dNdM = -f_of_sigma(sigma,z=z)*R*dlogsigma_dr(R)/3
+    dNdM = -f_of_sigma(sigma,z=z)*R*dlogsigma_dr(R)/3*rho_m/M**2
     return dNdM

@@ -4,14 +4,16 @@ Modelling the halo distribution of clouds. See Tinker and Chen ApJ 2008
 #Include astropy units
 import astropy.units as u
 from astropy.constants import G as grav
-from astropy.units.astrophys import Mpc, M_sun
-from numpy import pi
-from compos import const
+from astropy.units.astrophys import Mpc, Msun
+from astropy.cosmology import WMAP5
+from numpy import pi, arctan, sqrt, asarray, log10
+from halotools.empirical_models import NFWProfile
+import pdb
 
-const.initializecosmo()
+h = WMAP5.h
 H0 = 100*u.km/u.s/u.Mpc #(units of h km/s/Mpc)
 rho_cr0 = 3*H0**2/(8*pi*grav)
-rho_m0 = const.cosmo['omega_0']*rho_cr0
+rho_m0 = WMAP5.Om0*rho_cr0
 
 def rg(M,z=0):
     """
@@ -20,7 +22,7 @@ def rg(M,z=0):
     Parameters
     ----------
     M: astropy.Quantity
-        Halo mass
+        Halo mass in units of h^-1 Msun
     z: float, optional
         Redshift
     Returns
@@ -29,9 +31,9 @@ def rg(M,z=0):
         Effective gas radius in Mpc/h 
     """
     #Because the comoving radius of the halo is redshift independent,
-    return 0.08*Mpc/(1+z)*(M/1e12/M_sun)**(1/3)
+    return 0.08/(1+z)*Mpc*(M/1e12/Msun)**(1/3) #*(1+z)**-0.2
 
-def Aw(M, A_w0=13.0423002*u.nm*(u.cm)**2/u.g):
+def Aw(M, A_w0=9.5*u.nm*(u.cm)**2/u.g,z=0):
     """
     Fudge factor (for the classical model)
     Parameters
@@ -39,17 +41,18 @@ def Aw(M, A_w0=13.0423002*u.nm*(u.cm)**2/u.g):
     M: astropy.Quantity
         Halo mass
     A_w0: astropy.Quantity
-        13.0423002 h nm cm^2/g by default
+        13.0 h nm cm^2/g by default
     Returns
     -------
     A_w: astropy.Quantity
         In units of h nm cm^2/g
     """
-    if M.value<=1e12:
+    if M<=1e12*Msun:
         A_w = A_w0*(M.value/1e12)**(-0.172)
     else:
         A_w = A_w0*(M.value/1e12)**(-0.176)
     return A_w
+
 
 
 def g0(M,z=0,ah_by_Rg=0.2):
@@ -72,21 +75,22 @@ def g0(M,z=0,ah_by_Rg=0.2):
         of gas radius rg(M) and core
         radius ah (Msun/Mpc^2)
     """
-    from numpy import pi, arctan
-    from astropy.cosmology import Planck13
-    from halotools.empirical_models import NFWProfile
-
-    nfw = NFWProfile(cosmology=Planck13,redshit=z,mdef='200m',conc_mass_model='dutton_maccio14')
-    conc = nfw.conc_NFWmodel(prim_haloprop=M.to(M_sun).value/Planck13.h,mdef='200m')
+    #Initializing NFW everytime might be
+    #slowing it down. Consider initializing
+    #outside and updating z.
+    # 
+    # Cannot be done natively. :(
+    nfw = NFWProfile(cosmology=WMAP5,redshit=z,mdef='200m',conc_mass_model='dutton_maccio14')
+    conc = nfw.conc_NFWmodel(prim_haloprop=M.to(Msun).value/h,mdef='200m')
 
     Rg = rg(M,z)
-    m_enc = nfw.enclosed_mass(Rg.value/Planck13.h,M.value/Planck13.h,conc)*M_sun
+    m_enc = nfw.enclosed_mass(Rg.value/h,M.value/h,conc)*Msun
     ah = ah_by_Rg*Rg
 
     G0 = m_enc/(4*pi)/(Rg-ah*arctan(1/ah_by_Rg))
-    return G0.to(M_sun/Mpc)
+    return G0.to(Msun/Mpc)
 
-def rew_of_s(s,M,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
+def rew_of_s(s,M,ah_by_Rg=0.2,A_w0=1.0*u.nm*(u.cm)**2/u.g,z=0):
     """
     Defines the relationship between the REW
     of MgII 2796 and the impact parameter assuming
@@ -111,21 +115,20 @@ def rew_of_s(s,M,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
         Rest equivlent width of absorption for
         the given impact parameter and halo parameters.
     """
-    import numpy as np
     assert(s.value>=0), "Impact parameter cannot be negative"
 
     Rg = rg(M,z)
-    A_w = Aw(M,A_w0)
+    A_w = Aw(M,A_w0,z)
     ah = ah_by_Rg*Rg
     G0 = g0(M,z,ah_by_Rg)
 
-    if s.value>=Rg.value:
+    if s.to(Mpc).value>=Rg.value:
         return 0*u.nm
     else:
-        rew = A_w*2*G0/np.sqrt(s**2+ah**2)*np.arctan(np.sqrt((Rg**2-s**2)/(s**2+ah**2))).value
+        rew = A_w*2*G0/sqrt(s**2+ah**2)*arctan(sqrt((Rg**2-s**2)/(s**2+ah**2))).value
         return rew.to(u.nm)
 
-def lowest_mass(rew,low=8,high=16,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
+def lowest_mass(rew,low=0,high=16,ah_by_Rg=0.2,A_w0=9.5*u.nm*(u.cm)**2/u.g,z=0):
     """
     Finds the lowest halo mass for which
     the input rest equivalent width is possible
@@ -147,19 +150,17 @@ def lowest_mass(rew,low=8,high=16,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.
     Returns
     -------
     M: astropy.Quantity
-        Halo mass (M_sun)
+        Halo mass (Msun)
     """
     from scipy.optimize import brentq
-    import pdb
 
-    f = lambda logM: rew_of_s(0*Mpc,10**logM*M_sun,ah_by_Rg,A_w0,z).value - rew.value
+    f = lambda logM: rew_of_s(0*Mpc,10**logM*Msun,ah_by_Rg,A_w0,z).value - rew.value
     try:
-        return 10**brentq(f,low,high)*M_sun
+        return 10**brentq(f,low,high)*Msun
     except(ValueError):
-        pdb.set_trace()
         raise ValueError("Cannot find a solution in the search window.")
 
-def s_of_rew(rew,M,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
+def s_of_rew(rew,M,ah_by_Rg=0.2,A_w0=9.5*u.nm*(u.cm)**2/u.g,z=0):
     """
     Inverse function of rew_of_s. Uses brentq for root finding.
     Parameters
@@ -168,7 +169,7 @@ def s_of_rew(rew,M,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
         rest equivalent width of absorption.
         (nanometers).
     M : astropy.Quantity
-        Halo mass (M_sun).
+        Halo mass (Msun).
     ah_by_Rg: float, optional
         Ratio of core radius to effective gas
         radius
@@ -182,18 +183,18 @@ def s_of_rew(rew,M,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
     s : float
         Impact parameter (Mpc/h)
     """
-    import numpy as np
     from scipy.optimize import brentq
-    import pdb
 
     g = lambda s: rew_of_s(s*Mpc,M,ah_by_Rg,A_w0,z).value-rew.value
     Rg = rg(M,z)
     try:
+        # Really costly. Store results to speed up in case you
+        # want to use this multiple times.
         return brentq(g,0,Rg.value)*Mpc
     except(ValueError):
         raise ValueError("rew={:f} cannot be achieved with this model".format(rew))
 
-def kappa_g(M):
+def kappa_g(M,z):
     """
     This total probability density of finding a halo
     of mass M. For the classical model, this is a c-spline
@@ -203,23 +204,25 @@ def kappa_g(M):
     Parameters
     ----------
     M : astropy.Quantity
-        Halo mass (M_sun/h)
+        Halo mass (Msun/h)
     Returns
     -------
     kappa : float or numpy array
         Probability density at that mass    
     """
-    import numpy as np
     from scipy import interpolate
     #Data from
-    logm_array = np.asarray([10.0,11.33,12.66,14.0])
-    kappa_array = np.asarray([-1.721,-0.012,-0.198,-1.763])
-    spline_interp = interpolate.interp1d(logm_array,kappa_array,bounds_error=False,kind='linear')
+    logm_array = asarray([10.0-z,11.33-z,12.66,14.0])
+    if z==0:
+        kappa_array = asarray([-1.721,-0.012,-0.198,-1.763])
+    else:
+        kappa_array = asarray([0,0,0,0])
+    spline_interp = interpolate.interp1d(logm_array,kappa_array,bounds_error=False,kind='linear',fill_value="extrapolate")
 
-    output_points = 10**spline_interp(np.log10(M.value))
+    output_points = 10**spline_interp(log10(M.value))
     return output_points
 
-def _ds_drew(s,M,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
+def _ds_drew(s,M,ah_by_Rg=0.2,A_w0=9.5*u.nm*(u.cm)**2/u.g,z=0):
     """
     Returns ds/d(rew)
     Parameters
@@ -241,18 +244,20 @@ def _ds_drew(s,M,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
         Rate of change of impact parameter with
         rest equivalent width.
     """
-    import numpy as np
 
-    Rg = rg(M)
+    Rg = rg(M,z)
     ah = ah_by_Rg*Rg
     G0 = g0(M,z,ah_by_Rg)
-    A_w = Aw(M,A_w0)
-    x = lambda s: np.sqrt((Rg**2-s**2)/(ah**2+s**2))
-    y = lambda s: np.sqrt((ah**2+s**2))
-    dsdrew = 1/(2*A_w*G0)/(s*np.arctan(x(s)).value/y(s)**3 + (1+x(s)**2)*y(s)*s*x(s)/(Rg**2-s**2)/y(Rg)**2)
+    A_w = Aw(M,A_w0,z)
+
+    x = lambda s: sqrt((Rg**2-s**2)/(ah**2+s**2))
+    y = lambda s: sqrt((ah**2+s**2))
+    
+    dsdrew = 1/(2*A_w*G0)/(s*arctan(x(s)).value/y(s)**3 + (1+x(s)**2)*y(s)*s*x(s)/(Rg**2-s**2)/y(Rg)**2)
+    #pdb.set_trace()
     return dsdrew
 
-def p_rew_given_m(rew,M,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
+def p_rew_given_m(rew,M,ah_by_Rg=0.2,A_w0=9.5*u.nm*(u.cm)**2/u.g,z=0):
     """
     Returns the conditional probability P(REW|M) for
     the given value of M and REW.
@@ -275,10 +280,13 @@ def p_rew_given_m(rew,M,ah_by_Rg=0.2,A_w0=13.0423002*u.nm*(u.cm)**2/u.g,z=0):
     p : float
         P(REW|M) = kappa_g(M)*2s(REW|M)/Rg^2*ds/d(REW)
     """
-    import numpy as np
-    s = s_of_rew(rew,M,ah_by_Rg,A_w0,z)
+    try:
+        s = s_of_rew(rew,M,ah_by_Rg,A_w0,z)
+    except(ValueError):
+        p = 0/u.nm
+        return p
     Rg = rg(M,z)
-    k = kappa_g(M)
+    k = kappa_g(M,z)
     dsdrew = _ds_drew(s,M,ah_by_Rg,A_w0,z)
     p = k*2*s/Rg**2*dsdrew  
-    return p.to(1/u.nm)
+    return p.to(1/u.nm)[0]
