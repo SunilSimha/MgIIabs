@@ -6,7 +6,7 @@ import astropy.units as u
 from astropy.constants import G as grav, c
 from astropy.units.astrophys import Mpc, M_sun
 from astropy.cosmology import Planck13
-from numpy import pi, exp
+from numpy import pi, exp, linspace,log10, vectorize, asarray
 from compos import const
 from hmf import MassFunction
 
@@ -31,12 +31,13 @@ def d2ndWdl(rew,z=0,M_low=None,M_high=None,**kwargs):
     from scipy.integrate import simps
     import numpy as np
     import pdb
+    #pdb.set_trace()
     M_high = 16
     if M_low is None:
         #I won't be considering halos lower than 1e9 h^-1 Msun
         #This is simply because of the for of kappa_g
         try:
-            M_low = max(np.log10(hmod.lowest_mass(rew,z=z,**kwargs).value),9-z)
+            M_low = max(np.log10(hmod.lowest_mass(rew,z=z).value),8)
         except ValueError:
             return 0.0/u.nm/Mpc
     if M_high<M_low:
@@ -48,7 +49,7 @@ def d2ndWdl(rew,z=0,M_low=None,M_high=None,**kwargs):
         return 0.0/u.nm/Mpc
     dndm = mass_func.dndm[massfilter]
     Rg = hmod.rg(masses*M_sun,z=z).value
-    p = np.asarray([hmod.p_rew_given_m(rew,M*M_sun,z=z).value for M in masses])
+    p = np.asarray([hmod.p_rew_given_m(rew,M*M_sun,z=z,kappa_m=kwargs['kappa_m']).value for M in masses])
     
     integrand = p*np.pi*Rg**2*dndm*masses
     try:
@@ -106,11 +107,13 @@ def _dldz(z):
     omega_DE = const.cosmo['omega_q']
     return (c/H0/sqrt(omega_m*(1+z)**3+omega_DE)).to(Mpc)
 
-def d2ndWdz(rew,z=0.0,growthf=1,spline_interp=None):
+def d2ndWdz(rew,z=0.0,growthf=1,spline_interp=None,**kwargs):
     """
     Replaces the comoving distance with redshift
     """
-    return (d2ndWdl(rew,z,growthf)*_dldz(z)).to(1/u.nm)
+    import pdb
+    #pdb.set_trace()
+    return (d2ndWdl(rew,z,growthf,kappa_m=kwargs['kappa_m'])*_dldz(z)).to(1/u.nm)
 
 def _expJoin(x0,a,b):
     """
@@ -215,3 +218,17 @@ def _expJoin(x0,a,b):
 #    integral = A*ndtr(-(M_low+mu)/sigma)
 #    return integral/u.nm/u.Mpc
 #
+
+def opt_masses(z):
+    from scipy.optimize import curve_fit
+    from .observe import obs_d2ndwdz as zhu_men
+    import pdb
+    x = linspace(0.1,0.3,10)
+    y = log10(zhu_men(x*10,z))
+
+    def vec_d2(rewlist,z,kappa_m):
+        d2list = asarray([d2ndWdz(rew*u.nm,z,kappa_m=kappa_m).value/10 for rew in rewlist])
+        return d2list
+    func = lambda rew,k1,k2,k3,k4: log10(vec_d2(rew,z,[k1,k2,k3,k4]))
+    opt = curve_fit(func,x,y,p0=[9,10,11,12],bounds=(8,14))
+    return opt
